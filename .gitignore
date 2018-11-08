@@ -9,6 +9,7 @@ Makefile
 .*.s[a-z][a-z]
 
 # vscode
+.vscode
 *.idea
 
 build

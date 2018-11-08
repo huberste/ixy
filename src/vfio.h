@@ -6,6 +6,7 @@
 struct ixy_device;
 
 int vfio_init(struct ixy_device* dev);
+int vfio_map_resource(const char* pci_addr);
 int vfio_map_dma(struct ixy_device* dev, uint64_t vaddr, uint64_t iova, uint32_t size);
 
 #endif //IXY_VFIO_H
