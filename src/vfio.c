@@ -184,7 +184,9 @@ struct dma_memory vfio_allocate_dma(struct ixy_device* dev, size_t size, bool re
 	dma_map.vaddr = mmap(0, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
 	debug("result of mmap: %lx", dma_map.vaddr);
 	dma_map.size = size;
-	dma_map.iova = 0; // starting at 0x0 from device view
+	// The following obviosly won't work then more than one DMA map is needed!
+	// dma_map.iova = 0; // starting at 0x0 from device view
+	dma_map.iova = dma_map.vaddr; // starting at wherever the vaddr starts. == Identity Map
 	dma_map.flags = VFIO_DMA_MAP_FLAG_READ | VFIO_DMA_MAP_FLAG_WRITE;
 
 	int result = ioctl(container, VFIO_IOMMU_MAP_DMA, &dma_map);
