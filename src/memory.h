@@ -10,7 +10,7 @@
 struct ixy_device;
 
 #define HUGE_PAGE_BITS 21
-#define HUGE_PAGE_SIZE (1 << HUGE_PAGE_BITS)
+#define HUGE_PAGE_SIZE (1 << HUGE_PAGE_BITS) // 2.097.152 = 2M
 #define SIZE_PKT_BUF_HEADROOM 40
 
 struct pkt_buf {

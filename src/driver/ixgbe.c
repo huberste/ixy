@@ -300,7 +300,7 @@ struct ixy_device* ixgbe_init(const char* pci_addr, uint16_t rx_queues, uint16_t
 	dev->ixy.set_promisc = ixgbe_set_promisc;
 	dev->ixy.get_link_speed = ixgbe_get_link_speed;
 #ifdef USE_VFIO
-	dev->addr = vfio_map_resource(pci_addr);
+	dev->addr = vfio_map_resource(&dev->ixy);
 #else
 	dev->addr = pci_map_resource(pci_addr);
 #endif

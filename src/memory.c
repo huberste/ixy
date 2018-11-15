@@ -67,7 +67,7 @@ struct dma_memory memory_allocate_dma(struct ixy_device* dev, size_t size, bool 
 		void* addr = virt_addr + HUGE_PAGE_SIZE*i;
 		uint64_t vaddr = (uint64_t)addr;
 		uint64_t iova = (uint64_t)virt_to_phys(addr);
-		check_err(vfio_map_dma(dev, vaddr, iova, HUGE_PAGE_SIZE), "faile to create IOMMU mapping");
+		check_err(vfio_map_dma(dev, vaddr, iova, HUGE_PAGE_SIZE), "create IOMMU mapping");
 	}
 #endif
 	return (struct dma_memory) {

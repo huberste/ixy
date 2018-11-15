@@ -1,3 +1,5 @@
+#include <sys/file.h>
+
 #include "device.h"
 #include "driver/ixgbe.h"
 #include "driver/virtio.h"
@@ -5,7 +7,7 @@
 
 struct ixy_device* ixy_init(const char* pci_addr, uint16_t rx_queues, uint16_t tx_queues) {
 	// Read PCI configuration space
-	int config = pci_open_resource(pci_addr, "config");
+	int config = pci_open_resource(pci_addr, "config", O_RDONLY);
 	uint16_t vendor_id = read_io16(config, 0);
 	uint16_t device_id = read_io16(config, 2);
 	uint32_t class_id = read_io32(config, 8) >> 24;

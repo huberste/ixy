@@ -1,6 +1,7 @@
 #include <emmintrin.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/file.h>
 #include <unistd.h>
 
 #include "driver/device.h"
@@ -342,7 +343,7 @@ struct ixy_device* virtio_init(const char* pci_addr, uint16_t rx_queues, uint16_
 	struct virtio_device* dev = calloc(1, sizeof(*dev));
 	dev->ixy.pci_addr = strdup(pci_addr);
 #ifdef USE_VFIO
-	check_err(vfio_init(&dev->ixy), "failed to init vfio");
+	check_err(vfio_init(&dev->ixy), "init vfio");
 #endif
 	dev->ixy.driver_name = driver_name;
 	dev->ixy.num_rx_queues = rx_queues;
@@ -353,13 +354,13 @@ struct ixy_device* virtio_init(const char* pci_addr, uint16_t rx_queues, uint16_
 	dev->ixy.set_promisc = virtio_set_promisc;
 	dev->ixy.get_link_speed = virtio_get_link_speed;
 	enable_dma(pci_addr);
-	int config = pci_open_resource(pci_addr, "config");
+	int config = pci_open_resource(pci_addr, "config", O_RDONLY);
 	uint16_t device_id = read_io16(config, 2);
 	close(config);
 	// Check config if device is legacy network card
 	if (device_id == 0x1000) {
 		info("Detected virtio legacy network card");
-		dev->fd = pci_open_resource(pci_addr, "resource0");
+		dev->fd = pci_open_resource(pci_addr, "resource0", O_RDWR);
 		virtio_legacy_init(dev);
 	} else {
 		error("Modern device not supported");

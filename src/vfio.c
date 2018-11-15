@@ -10,6 +10,7 @@
 #include <string.h>
 #include <asm/errno.h>
 #include <sys/ioctl.h>
+#include <sys/mman.h>
 #include <sys/stat.h>
 
 #include <linux/vfio.h>
@@ -107,29 +108,34 @@ int vfio_init(struct ixy_device* dev){
 		return -1;
 	}
 
-	// Test and setup the device
-	struct vfio_device_info device_info = { .argsz = sizeof(device_info) };
-	ioctl(dev->vfio_fd, VFIO_DEVICE_GET_INFO, &device_info);
-
 	return 0;
 }
 
-int vfio_map_resource(const char* pci_addr){
-	// this is what pci_map_resource does:
-	/*
-	char path[PATH_MAX];
-	snprintf(path, PATH_MAX, "/sys/bus/pci/devices/%s/resource0", pci_addr);
-	debug("Mapping PCI resource at %s", path);
-	// for VFIO we probably don't want to unbind the driver...
-	//remove_driver(pci_addr);
-	enable_dma(pci_addr);
-	int fd = check_err(open(path, O_RDWR), "open pci resource");
-	struct stat stat;
-	check_err(fstat(fd, &stat), "stat pci resource");
-	return (uint8_t*) check_err(mmap(NULL, stat.st_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0), "mmap pci resource");
-	*/
-	// TODO(stefan.huber@stusta.de): write this procedure...
-	return 0;
+void vfio_enable_dma(struct ixy_device* dev) {
+	// write to the command register (offset 4) in the PCIe config space
+	int command_register_offset = 4;
+	// bit 2 is "bus master enable", see PCIe 3.0 specification section 7.5.1.1
+	int bus_master_enable_bit = 2;
+	// Get region info for config region
+	struct vfio_region_info conf_reg = { .argsz = sizeof(conf_reg) };
+	conf_reg.index = VFIO_PCI_CONFIG_REGION_INDEX;
+	// TODO add return value checking for ioctl
+	ioctl(dev->vfio_fd, VFIO_DEVICE_GET_REGION_INFO, &conf_reg);
+	uint16_t dma = 0;
+	pread(dev->vfio_fd, &dma, 2, conf_reg.offset + command_register_offset);
+	debug("read following dma value: 0x%x", dma);
+	dma |= 1 << bus_master_enable_bit;
+	pwrite(dev->vfio_fd, &dma, 2, conf_reg.offset + command_register_offset);
+}
+
+unint8_t* vfio_map_resource(struct ixy_device* dev){
+	vfio_enable_dma();
+	// Get region info for BAR0
+	struct vfio_region_info bar0_reg = { .argsz = sizeof(bar0_reg) };
+	bar0_reg.index = VFIO_PCI_BAR0_REGION_INDEX;
+	// TODO add return value checking for ioctl
+	ioctl(dev->vfio_fd, VFIO_DEVICE_GET_REGION_INFO, &bar0_reg);
+	return (uint8_t*) check_err(mmap(NULL, bar0_reg.size, PROT_READ | PROT_WRITE, MAP_SHARED, dev->vfio_fd, bar0_reg.offset), "mmap VFIO pci resource");
 }
 
 int vfio_map_dma(struct ixy_device* dev, uint64_t vaddr, uint64_t iova, uint32_t size){
