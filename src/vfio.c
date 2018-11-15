@@ -128,8 +128,8 @@ void vfio_enable_dma(struct ixy_device* dev) {
 	pwrite(dev->vfio_fd, &dma, 2, conf_reg.offset + command_register_offset);
 }
 
-unint8_t* vfio_map_resource(struct ixy_device* dev){
-	vfio_enable_dma();
+uint8_t* vfio_map_resource(struct ixy_device* dev){
+	vfio_enable_dma(dev);
 	// Get region info for BAR0
 	struct vfio_region_info bar0_reg = { .argsz = sizeof(bar0_reg) };
 	bar0_reg.index = VFIO_PCI_BAR0_REGION_INDEX;
