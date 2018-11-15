@@ -2,6 +2,7 @@
 
 #include "vfio.h"
 #include "log.h"
+#include "memory.h"
 #include "driver/device.h"
 
 #include <fcntl.h>
@@ -136,6 +137,81 @@ uint8_t* vfio_map_resource(struct ixy_device* dev){
 	// TODO add return value checking for ioctl
 	ioctl(dev->vfio_fd, VFIO_DEVICE_GET_REGION_INFO, &bar0_reg);
 	return (uint8_t*) check_err(mmap(NULL, bar0_reg.size, PROT_READ | PROT_WRITE, MAP_SHARED, dev->vfio_fd, bar0_reg.offset), "mmap VFIO pci resource");
+}
+
+struct dma_memory vfio_allocate_dma(struct ixy_device* dev, size_t size, bool require_contiguous) {
+	/* old memoy_allocate_dma function
+	// round up to multiples of 2 MB if necessary, this is the wasteful part
+	// this could be fixed by co-locating allocations on the same page until a request would be too large
+	// when fixing this: make sure to align on 128 byte boundaries (82599 dma requirement)
+	if (size % HUGE_PAGE_SIZE) {
+		size = ((size >> HUGE_PAGE_BITS) + 1) << HUGE_PAGE_BITS;
+	}
+	if (require_contiguous && size > HUGE_PAGE_SIZE) {
+		// this is the place to implement larger contiguous physical mappings if that's ever needed
+		error("could not map physically contiguous memory");
+	}
+	// unique filename, C11 stdatomic.h requires a too recent gcc, we want to support gcc 4.8
+	uint32_t id = __sync_fetch_and_add(&huge_pg_id, 1);
+	char path[PATH_MAX];
+	snprintf(path, PATH_MAX, "/mnt/huge/ixy-%d-%d", getpid(), id);
+	// temporary file, will be deleted to prevent leaks of persistent pages
+	int fd = check_err(open(path, O_CREAT | O_RDWR, S_IRWXU), "open hugetlbfs file, check that /mnt/huge is mounted");
+	check_err(ftruncate(fd, (off_t) size), "allocate huge page memory, check hugetlbfs configuration");
+	void* virt_addr = (void*) check_err(mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_HUGETLB, fd, 0), "mmap hugepage");
+	// never swap out DMA memory
+	check_err(mlock(virt_addr, size), "disable swap for DMA memory");
+	// don't keep it around in the hugetlbfs
+	close(fd);
+	unlink(path);
+#ifdef USE_VFIO
+	// create IOMMU mapping
+	for(uint32_t i = 0; i < size / HUGE_PAGE_SIZE; i++){
+		void* addr = virt_addr + HUGE_PAGE_SIZE*i;
+		uint64_t vaddr = (uint64_t)addr;
+		uint64_t iova = (uint64_t)virt_to_phys(addr);
+		check_err(vfio_map_dma(dev, vaddr, iova, HUGE_PAGE_SIZE), "create IOMMU mapping");
+	}
+#endif
+	return (struct dma_memory) {
+		.virt = virt_addr,
+		.phy = virt_to_phys(virt_addr)
+	};
+	*/
+
+	// Allocate some space and setup a DMA mapping
+	struct vfio_iommu_type1_dma_map dma_map = { .argsz = sizeof(dma_map) };
+	dma_map.vaddr = mmap(0, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
+	debug("result of mmap: %lx", dma_map.vaddr);
+	dma_map.size = size;
+	dma_map.iova = 0; // starting at 0x0 from device view
+	dma_map.flags = VFIO_DMA_MAP_FLAG_READ | VFIO_DMA_MAP_FLAG_WRITE;
+
+	int result = ioctl(container, VFIO_IOMMU_MAP_DMA, &dma_map);
+	if(result == -1) { // ioctl can return values > 0 and it is no error!
+		warn("Could not ioctl VFIO_IOMMU_MAP_DMA: errno = 0x%x:", errno);
+		switch(errno) {
+			case EBADF:
+					debug("Bad file descriptor.");
+					break;
+			case EFAULT:
+					debug("argp references an inaccessible memory area.");
+					break;
+			case EINVAL:
+					debug("request or argp is not valid.");
+					break;
+			case ENOTTY:
+					debug("fd is no tty.");
+					break;
+			default:
+					debug("unknown error...");
+		}
+	}
+	debug("result of ioctl: 0x%lx", result);
+	return (struct dma_memory) {
+			.virt = dma_map.vaddr,
+			.phy = dma_map.iova
+	};
 }
 
 int vfio_map_dma(struct ixy_device* dev, uint64_t vaddr, uint64_t iova, uint32_t size){
