@@ -6,6 +6,7 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <linux/limits.h>
 #include <linux/vfio.h>
 
 #include <sys/ioctl.h>
@@ -22,16 +23,57 @@ static uint64_t get_iova(uint32_t size) {
     return ret;
 }
 
-/* returns zero on success or -1 else */
+/* returns zero on success or -1 else. works only as root and should thus be
+ * executed before the real program.
+ * This function is as of yet untested, so ... beyond here be dragons. Or
+ * unicorns. But most probably dragons.*/
 int bind_pci_device_to_vfio(char* pci_addr) {
-    return -1;
+    // unbind old driver
+    char path[PATH_MAX];
+	snprintf(path, PATH_MAX, "/sys/bus/pci/devices/%s/driver/unbind", pci_addr);
+	int fd = open(path, O_WRONLY);
+	if (fd == -1) {
+		// no driver loaded
+	} else {
+        if (write(fd, pci_addr, strlen(pci_addr)) != (ssize_t) strlen(pci_addr)) {
+            return -1;
+        }
+        if (close(fd) < 0) {
+            return -1;
+        }
+    }
+    // get vendor and device id
+	snprintf(path, PATH_MAX, "/sys/bus/pci/devices/%s/%s", pci_addr, "config");
+	fd = open(path, O_RDONLY);
+    uint16_t vendor_id, device_id;
+    pread(fd, &vendor_id, sizeof(vendor_id), 0);
+    pread(fd, &device_id, sizeof(device_id), 2);
+	if (close(fd) < 0) {
+        return -1;
+    }
+    // bind vfio driver
+    snprintf(path, PATH_MAX, "%d %d", vendor_id, device_id);
+    fd = open("/sys/bus/pci/drivers/vfio-pci/", O_WRONLY);
+    if (fd == -1) {
+		// that thing can not be found...
+	} else {
+        if (write(fd, path, strlen(path)) != (ssize_t) strlen(path)) {
+            // could not write enough bytes
+            return -1;
+        }
+        if (close(fd) < 0) {
+            return -1;
+        }
+    }
+    // Well, the unicorns *did* save the day!
+    return 0;
 }
 
 /* returns the devices file descriptor or -1 on error */
 int vfio_init(char* pci_addr) {
     // find iommu group for the device
 	// `readlink /sys/bus/pci/device/<segn:busn:devn.funcn>/iommu_group`
-	char path[128], iommu_group_path[128];
+	char path[PATH_MAX], iommu_group_path[PATH_MAX];
 	struct stat st;
 	snprintf(path, sizeof(path), "/sys/bus/pci/devices/%s/", pci_addr);
 	int ret = stat(path, &st);
