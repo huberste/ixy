@@ -419,7 +419,7 @@ uint32_t virtio_rx_batch(struct ixy_device* ixy, uint16_t queue_id, struct pkt_b
 		memcpy(buf->head_room + sizeof(buf->head_room) - sizeof(net_hdr), &net_hdr, sizeof(net_hdr));
 		vq->vring.desc[idx].len = buf->size + sizeof(net_hdr);
 		vq->vring.desc[idx].addr =
-		    buf->buf_addr_phy + offsetof(struct pkt_buf, head_room) + sizeof(buf->head_room) - sizeof(net_hdr);
+			buf->buf_addr_phy + offsetof(struct pkt_buf, head_room) + sizeof(buf->head_room) - sizeof(net_hdr);
 		vq->vring.desc[idx].flags = VRING_DESC_F_WRITE;
 		vq->vring.desc[idx].next = 0;
 		vq->virtual_addresses[idx] = buf;
@@ -478,7 +478,7 @@ uint32_t virtio_tx_batch(struct ixy_device* ixy, uint16_t queue_id, struct pkt_b
 
 		vq->vring.desc[idx].len = buf->size + sizeof(net_hdr);
 		vq->vring.desc[idx].addr =
-		    buf->buf_addr_phy + offsetof(struct pkt_buf, head_room) + sizeof(buf->head_room) - sizeof(net_hdr);
+			buf->buf_addr_phy + offsetof(struct pkt_buf, head_room) + sizeof(buf->head_room) - sizeof(net_hdr);
 		vq->vring.desc[idx].flags = 0;
 		vq->vring.desc[idx].next = 0;
 		vq->vring.avail->ring[idx] = idx;
