@@ -16,3 +16,5 @@ Makefile
 build
 ixy-fwd
 ixy-pktgen
+*.o
+*.so

@@ -187,7 +187,7 @@ struct dma_memory vfio_allocate_dma(struct ixy_device* dev, size_t size, bool re
 	dma_map.iova = dma_map.vaddr; // starting at wherever the vaddr starts. == Identity Map
 	dma_map.flags = VFIO_DMA_MAP_FLAG_READ | VFIO_DMA_MAP_FLAG_WRITE;
 
-	int result = ioctl(container, VFIO_IOMMU_MAP_DMA, &dma_map);
+	int result = ioctl(dev->vfio_cfd, VFIO_IOMMU_MAP_DMA, &dma_map);
 	if(result == -1) { // ioctl can return values > 0 and it is no error!
 		error("Could not ioctl VFIO_IOMMU_MAP_DMA: errno = 0x%x:", errno);
 		switch(errno) {

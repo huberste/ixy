@@ -28,3 +28,4 @@ set(SOURCE_COMMON src/pci.c src/memory.c src/stats.c src/driver/device.c src/dri
 
 add_executable(ixy-pktgen src/app/ixy-pktgen.c ${SOURCE_COMMON})
 add_executable(ixy-fwd src/app/ixy-fwd.c ${SOURCE_COMMON})
+add_library(ixy-vfio SHARED src/libixy-vfio.c)
