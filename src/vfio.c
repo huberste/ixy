@@ -17,7 +17,7 @@
 #include <linux/vfio.h>
 
 int vfio_init(struct ixy_device* dev){
-	debug("Initialize vfio");
+	debug("Initialize vfio device");
 	// find iommu group for the device
 	// `readlink /sys/bus/pci/device/<segn:busn:devn.funcn>/iommu_group`
 	char path[128], iommu_group_path[128];
@@ -67,19 +67,19 @@ int vfio_init(struct ixy_device* dev){
 		warn("Could not ioctl VFIO_GROUP_GET_STATUS: errno = 0x%x:", errno);
 		switch(errno) {
 			case EBADF:
-				debug("Bad file descriptor.");
+				error("Bad file descriptor.");
 				break;
 			case EFAULT:
-				debug("argp references an inaccessible memory area.");
+				error("argp references an inaccessible memory area.");
 				break;
 			case EINVAL:
-				debug("request or argp is not valid.");
+				error("request or argp is not valid.");
 				break;
 			case ENOTTY:
-				debug("fd is no tty.");
+				error("fd is no tty.");
 				break;
 			default:
-				debug("unknown error...");
+				error("unknown error...");
 		}
 		return ret;
 	}
@@ -120,11 +120,9 @@ void vfio_enable_dma(struct ixy_device* dev) {
 	// Get region info for config region
 	struct vfio_region_info conf_reg = { .argsz = sizeof(conf_reg) };
 	conf_reg.index = VFIO_PCI_CONFIG_REGION_INDEX;
-	// TODO add return value checking for ioctl
-	ioctl(dev->vfio_fd, VFIO_DEVICE_GET_REGION_INFO, &conf_reg);
+	check_err(ioctl(dev->vfio_fd, VFIO_DEVICE_GET_REGION_INFO, &conf_reg), "get vfio config region info");
 	uint16_t dma = 0;
 	pread(dev->vfio_fd, &dma, 2, conf_reg.offset + command_register_offset);
-	debug("read following dma value: 0x%x", dma);
 	dma |= 1 << bus_master_enable_bit;
 	pwrite(dev->vfio_fd, &dma, 2, conf_reg.offset + command_register_offset);
 }
@@ -134,11 +132,11 @@ uint8_t* vfio_map_resource(struct ixy_device* dev){
 	// Get region info for BAR0
 	struct vfio_region_info bar0_reg = { .argsz = sizeof(bar0_reg) };
 	bar0_reg.index = VFIO_PCI_BAR0_REGION_INDEX;
-	// TODO add return value checking for ioctl
-	ioctl(dev->vfio_fd, VFIO_DEVICE_GET_REGION_INFO, &bar0_reg);
+	check_err(ioctl(dev->vfio_fd, VFIO_DEVICE_GET_REGION_INFO, &bar0_reg), "get vfio BAR0 region info");
 	return (uint8_t*) check_err(mmap(NULL, bar0_reg.size, PROT_READ | PROT_WRITE, MAP_SHARED, dev->vfio_fd, bar0_reg.offset), "mmap VFIO pci resource");
 }
 
+/* This function is not needed at the moment, it's function is implemented in memory.c/memory_allocate_dma */
 struct dma_memory vfio_allocate_dma(struct ixy_device* dev, size_t size, bool require_contiguous) {
 	/* old memoy_allocate_dma function
 	// round up to multiples of 2 MB if necessary, this is the wasteful part
@@ -182,34 +180,33 @@ struct dma_memory vfio_allocate_dma(struct ixy_device* dev, size_t size, bool re
 	// Allocate some space and setup a DMA mapping
 	struct vfio_iommu_type1_dma_map dma_map = { .argsz = sizeof(dma_map) };
 	dma_map.vaddr = mmap(0, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
-	debug("result of mmap: %lx", dma_map.vaddr);
 	dma_map.size = size;
-	// The following obviosly won't work then more than one DMA map is needed!
+	// The following obviosly won't work when more than one DMA map is needed!
 	// dma_map.iova = 0; // starting at 0x0 from device view
+	// TODO(stefan.huber@stusta.de): use other, more efficient mapping?
 	dma_map.iova = dma_map.vaddr; // starting at wherever the vaddr starts. == Identity Map
 	dma_map.flags = VFIO_DMA_MAP_FLAG_READ | VFIO_DMA_MAP_FLAG_WRITE;
 
 	int result = ioctl(container, VFIO_IOMMU_MAP_DMA, &dma_map);
 	if(result == -1) { // ioctl can return values > 0 and it is no error!
-		warn("Could not ioctl VFIO_IOMMU_MAP_DMA: errno = 0x%x:", errno);
+		error("Could not ioctl VFIO_IOMMU_MAP_DMA: errno = 0x%x:", errno);
 		switch(errno) {
 			case EBADF:
-					debug("Bad file descriptor.");
+					error("Bad file descriptor.");
 					break;
 			case EFAULT:
-					debug("argp references an inaccessible memory area.");
+					error("argp references an inaccessible memory area.");
 					break;
 			case EINVAL:
-					debug("request or argp is not valid.");
+					error("request or argp is not valid.");
 					break;
 			case ENOTTY:
-					debug("fd is no tty.");
+					error("fd is no tty.");
 					break;
 			default:
-					debug("unknown error...");
+					error("unknown error...");
 		}
 	}
-	debug("result of ioctl: 0x%lx", result);
 	return (struct dma_memory) {
 			.virt = dma_map.vaddr,
 			.phy = dma_map.iova

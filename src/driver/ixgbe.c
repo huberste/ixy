@@ -134,13 +134,10 @@ static void init_rx(struct ixgbe_device* dev) {
 		set_flags32(dev->addr, IXGBE_SRRCTL(i), IXGBE_SRRCTL_DROP_EN);
 		// setup descriptor ring, see section 7.1.9
 		uint32_t ring_size_bytes = NUM_RX_QUEUE_ENTRIES * sizeof(union ixgbe_adv_rx_desc);
-#ifdef USE_VFIO
-		struct dma_memory mem = vfio_allocate_dma(&dev->ixy, ring_size_bytes, true);
-#else
 		struct dma_memory mem = memory_allocate_dma(&dev->ixy, ring_size_bytes, true);
-#endif
 		// neat trick from Snabb: initialize to 0xFF to prevent rogue memory accesses on premature DMA activation
 		memset(mem.virt, -1, ring_size_bytes);
+		// tell the device where it can write to (its iova, so its view)
 		set_reg32(dev->addr, IXGBE_RDBAL(i), (uint32_t) (mem.phy & 0xFFFFFFFFull));
 		set_reg32(dev->addr, IXGBE_RDBAH(i), (uint32_t) (mem.phy >> 32));
 		set_reg32(dev->addr, IXGBE_RDLEN(i), ring_size_bytes);
@@ -191,6 +188,7 @@ static void init_tx(struct ixgbe_device* dev) {
 		uint32_t ring_size_bytes = NUM_TX_QUEUE_ENTRIES * sizeof(union ixgbe_adv_tx_desc);
 		struct dma_memory mem = memory_allocate_dma(&dev->ixy, ring_size_bytes, true);
 		memset(mem.virt, -1, ring_size_bytes);
+		// tell the device where it can write to (its iova, so its view)
 		set_reg32(dev->addr, IXGBE_TDBAL(i), (uint32_t) (mem.phy & 0xFFFFFFFFull));
 		set_reg32(dev->addr, IXGBE_TDBAH(i), (uint32_t) (mem.phy >> 32));
 		set_reg32(dev->addr, IXGBE_TDLEN(i), ring_size_bytes);
@@ -282,6 +280,8 @@ static void reset_and_init(struct ixgbe_device* dev) {
 
 struct ixy_device* ixgbe_init(const char* pci_addr, uint16_t rx_queues, uint16_t tx_queues) {
 	if (getuid()) {
+		// TODO(stefan.huber@stusta.de): remove warning when using VFIO. Or
+		// replace it with something better
 		warn("Not running as root, this will probably fail");
 	}
 	if (rx_queues > MAX_QUEUES) {

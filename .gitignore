@@ -10,6 +10,7 @@ Makefile
 
 # vscode
 .vscode
+*.code-workspace
 *.idea
 
 build

@@ -13,6 +13,7 @@
 void remove_driver(const char* pci_addr) {
 #ifdef USE_VFIO
 	// don't remove VFIO driver
+	// TODO(stefan.huber@stusta.de): Check if VFIO driver is really loaded
 	return;
 #endif
 	char path[PATH_MAX];

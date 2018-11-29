@@ -48,6 +48,7 @@ struct dma_memory memory_allocate_dma(struct ixy_device* dev, size_t size, bool 
 		// this is the place to implement larger contiguous physical mappings if that's ever needed
 		error("could not map physically contiguous memory");
 	}
+	// TODO(stefan.huber@stusta.de): Why do we need the hugetlbfs file when we close is anyways?
 	// unique filename, C11 stdatomic.h requires a too recent gcc, we want to support gcc 4.8
 	uint32_t id = __sync_fetch_and_add(&huge_pg_id, 1);
 	char path[PATH_MAX];
@@ -66,13 +67,17 @@ struct dma_memory memory_allocate_dma(struct ixy_device* dev, size_t size, bool 
 	for(uint32_t i = 0; i < size / HUGE_PAGE_SIZE; i++){
 		void* addr = virt_addr + HUGE_PAGE_SIZE*i;
 		uint64_t vaddr = (uint64_t)addr;
-		uint64_t iova = (uint64_t)virt_to_phys(addr);
+		// TODO(stefan.huber@stusta.de): do we *want* virt_to_phys?
+		// We don't *need* virt_to_phys with vfio, since we can just give the
+		// device memory starting at any arbitrary position (dma_map.iova)
+		uint64_t iova = (uint64_t)virt_to_phys(addr); /* iova = IO Virtual Address, so the memory starts here FROM DEVICE VIEW */
 		check_err(vfio_map_dma(dev, vaddr, iova, HUGE_PAGE_SIZE), "create IOMMU mapping");
 	}
 #endif
 	return (struct dma_memory) {
 		.virt = virt_addr,
-		.phy = virt_to_phys(virt_addr)
+		.phy = virt_to_phys(virt_addr) /* for VFIO, this needs to point to the device view memory = IOVA! */
+		// TODO(stefan.huber@stusta.de): We don't need this dma_memory struct, vfio_iommu_type1_dma_map has the same functionality and is created anyways.
 	};
 }
 
