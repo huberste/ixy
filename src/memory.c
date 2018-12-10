@@ -93,7 +93,11 @@ struct mempool* memory_allocate_mempool(struct ixy_device* dev, uint32_t num_ent
 		error("entry size must be a divisor of the huge page size (%d)", HUGE_PAGE_SIZE);
 	}
 	struct mempool* mempool = (struct mempool*) malloc(sizeof(struct mempool) + num_entries * sizeof(uint32_t));
+#ifdef USE_VFIO
+	struct dma_memory mem = vfio_allocate_dma(dev, num_entries * entry_size, false);
+#else
 	struct dma_memory mem = memory_allocate_dma(dev, num_entries * entry_size, false);
+#endif
 	mempool->num_entries = num_entries;
 	mempool->buf_size = entry_size;
 	mempool->base_addr = mem.virt;
@@ -103,7 +107,11 @@ struct mempool* memory_allocate_mempool(struct ixy_device* dev, uint32_t num_ent
 		struct pkt_buf* buf = (struct pkt_buf*) (((uint8_t*) mempool->base_addr) + i * entry_size);
 		// physical addresses are not contiguous within a pool, we need to get the mapping
 		// minor optimization opportunity: this only needs to be done once per page
+#ifdef USE_VFIO
+		buf->buf_addr_phy = buf;
+#else
 		buf->buf_addr_phy = virt_to_phys(buf);
+#endif
 		buf->mempool_idx = i;
 		buf->mempool = mempool;
 		buf->size = 0;
