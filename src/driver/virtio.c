@@ -11,9 +11,7 @@
 #include "virtio.h"
 #include "virtio_type.h"
 
-#ifdef USE_VFIO
 #include "vfio.h"
-#endif
 
 static const char* driver_name = "ixy-virtio";
 
@@ -342,9 +340,9 @@ struct ixy_device* virtio_init(const char* pci_addr, uint16_t rx_queues, uint16_
 	remove_driver(pci_addr);
 	struct virtio_device* dev = calloc(1, sizeof(*dev));
 	dev->ixy.pci_addr = strdup(pci_addr);
-#ifdef USE_VFIO
-	check_err(vfio_init(&dev->ixy), "init vfio");
-#endif
+	if (dev->ixy.vfio) {
+		check_err(vfio_init(&dev->ixy), "init vfio");
+	}
 	dev->ixy.driver_name = driver_name;
 	dev->ixy.num_rx_queues = rx_queues;
 	dev->ixy.num_tx_queues = tx_queues;

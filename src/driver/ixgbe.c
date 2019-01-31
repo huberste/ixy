@@ -1,6 +1,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <linux/limits.h>
+#include <sys/stat.h>
 
 #include "log.h"
 #include "ixgbe.h"
@@ -10,9 +12,7 @@
 #include "driver/device.h"
 #include "ixgbe_type.h"
 
-#ifdef USE_VFIO
 #include "vfio.h"
-#endif
 
 const char* driver_name = "ixy-ixgbe";
 
@@ -134,11 +134,12 @@ static void init_rx(struct ixgbe_device* dev) {
 		set_flags32(dev->addr, IXGBE_SRRCTL(i), IXGBE_SRRCTL_DROP_EN);
 		// setup descriptor ring, see section 7.1.9
 		uint32_t ring_size_bytes = NUM_RX_QUEUE_ENTRIES * sizeof(union ixgbe_adv_rx_desc);
-#ifdef USE_VFIO
-		struct dma_memory mem = vfio_allocate_dma(&dev->ixy, ring_size_bytes, true);
-#else
-		struct dma_memory mem = memory_allocate_dma(&dev->ixy, ring_size_bytes, true);
-#endif
+		struct dma_memory mem;
+		if (&dev->ixy.vfio) {
+			mem = vfio_allocate_dma(&dev->ixy, ring_size_bytes, true);
+		} else {
+			mem = memory_allocate_dma(&dev->ixy, ring_size_bytes, true);
+		}
 		// neat trick from Snabb: initialize to 0xFF to prevent rogue memory accesses on premature DMA activation
 		memset(mem.virt, -1, ring_size_bytes);
 		// tell the device where it can write to (its iova, so its view)
@@ -190,11 +191,12 @@ static void init_tx(struct ixgbe_device* dev) {
 
 		// setup descriptor ring, see section 7.1.9
 		uint32_t ring_size_bytes = NUM_TX_QUEUE_ENTRIES * sizeof(union ixgbe_adv_tx_desc);
-#ifdef USE_VFIO
-		struct dma_memory mem = vfio_allocate_dma(&dev->ixy, ring_size_bytes, true);
-#else
-		struct dma_memory mem = memory_allocate_dma(&dev->ixy, ring_size_bytes, true);
-#endif
+		struct dma_memory mem;
+		if (&dev->ixy.vfio) {
+			mem = vfio_allocate_dma(&dev->ixy, ring_size_bytes, true);
+		} else {
+			mem = memory_allocate_dma(&dev->ixy, ring_size_bytes, true);
+		}
 		memset(mem.virt, -1, ring_size_bytes);
 		// tell the device where it can write to (its iova, so its view)
 		set_reg32(dev->addr, IXGBE_TDBAL(i), (uint32_t) (mem.phy & 0xFFFFFFFFull));
@@ -300,9 +302,12 @@ struct ixy_device* ixgbe_init(const char* pci_addr, uint16_t rx_queues, uint16_t
 	}
 	struct ixgbe_device* dev = (struct ixgbe_device*) malloc(sizeof(struct ixgbe_device));
 	dev->ixy.pci_addr = strdup(pci_addr);
-#ifdef USE_VFIO
-	check_err(vfio_init(&dev->ixy), "init vfio");
-#endif
+	char path[PATH_MAX];
+	snprintf(path, PATH_MAX, "/sys/bus/pci/devices/%s/iommu_group", pci_addr);
+	dev->ixy.vfio = fileexists(path);
+	if (dev->ixy.vfio) {
+		check_err(vfio_init(&dev->ixy), "init vfio");
+	}
 	dev->ixy.driver_name = driver_name;
 	dev->ixy.num_rx_queues = rx_queues;
 	dev->ixy.num_tx_queues = tx_queues;
@@ -311,11 +316,11 @@ struct ixy_device* ixgbe_init(const char* pci_addr, uint16_t rx_queues, uint16_t
 	dev->ixy.read_stats = ixgbe_read_stats;
 	dev->ixy.set_promisc = ixgbe_set_promisc;
 	dev->ixy.get_link_speed = ixgbe_get_link_speed;
-#ifdef USE_VFIO
-	dev->addr = vfio_map_resource(&dev->ixy);
-#else
-	dev->addr = pci_map_resource(pci_addr);
-#endif
+	if (dev->ixy.vfio) {
+		dev->addr = vfio_map_resource(&dev->ixy);
+	} else {
+		dev->addr = pci_map_resource(pci_addr);
+	}
 	dev->rx_queues = calloc(rx_queues, sizeof(struct ixgbe_rx_queue) + sizeof(void*) * MAX_RX_QUEUE_ENTRIES);
 	dev->tx_queues = calloc(tx_queues, sizeof(struct ixgbe_tx_queue) + sizeof(void*) * MAX_TX_QUEUE_ENTRIES);
 	reset_and_init(dev);
@@ -510,4 +515,3 @@ uint32_t ixgbe_tx_batch(struct ixy_device* ixy, uint16_t queue_id, struct pkt_bu
 	set_reg32(dev->addr, IXGBE_TDT(queue_id), queue->tx_index);
 	return sent;
 }
-

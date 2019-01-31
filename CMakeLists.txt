@@ -13,13 +13,6 @@ add_compile_options(-g -O2 -march=native -fomit-frame-pointer -std=c11
 	-Wformat=2
 )
 
-option(WITH_VFIO "Enable VFIO IOMMU Protection" ON)
-
-if(WITH_VFIO)
-	add_compile_options(-DUSE_VFIO)
-endif()
-
-
 include_directories(
 	${CMAKE_CURRENT_SOURCE_DIR}/src
 )

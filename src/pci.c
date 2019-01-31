@@ -2,6 +2,7 @@
 #include <errno.h>
 #include <linux/limits.h>
 #include <stdio.h>
+#include <stdbool.h>
 #include <sys/file.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -11,11 +12,6 @@
 #include "log.h"
 
 void remove_driver(const char* pci_addr) {
-#ifdef USE_VFIO
-	// don't remove VFIO driver
-	// TODO(stefan.huber@stusta.de): Check if VFIO driver is really loaded
-	return;
-#endif
 	char path[PATH_MAX];
 	snprintf(path, PATH_MAX, "/sys/bus/pci/devices/%s/driver/unbind", pci_addr);
 	int fd = open(path, O_WRONLY);
@@ -62,4 +58,17 @@ int pci_open_resource(const char* pci_addr, const char* resource, int flags) {
 	debug("Opening PCI resource at %s", path);
 	int fd = check_err(open(path, flags), "open pci resource");
 	return fd;
+}
+
+/*
+ * Check if a file exist using stat() function
+ * return true if the file exist otherwise return false
+ */
+int fileexists(const char* filename){
+    struct stat buffer;
+    int exist = stat(filename,&buffer);
+    if(exist == 0)
+        return true;
+    else // -1
+        return false;
 }

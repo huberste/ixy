@@ -10,10 +10,8 @@
 #include <sys/mman.h>
 #include <sys/ioctl.h>
 
-#ifdef USE_VFIO
 #include "vfio.h"
 #include <linux/vfio.h>
-#endif
 
 // translate a virtual address to a physical one via /proc/self/pagemap
 static uintptr_t virt_to_phys(void* virt) {
@@ -62,18 +60,18 @@ struct dma_memory memory_allocate_dma(struct ixy_device* dev, size_t size, bool 
 	// don't keep it around in the hugetlbfs
 	close(fd);
 	unlink(path);
-#ifdef USE_VFIO
-	// create IOMMU mapping
-	for(uint32_t i = 0; i < size / HUGE_PAGE_SIZE; i++){
-		void* addr = virt_addr + HUGE_PAGE_SIZE*i;
-		uint64_t vaddr = (uint64_t)addr;
-		// TODO(stefan.huber@stusta.de): do we *want* virt_to_phys?
-		// We don't *need* virt_to_phys with vfio, since we can just give the
-		// device memory starting at any arbitrary position (dma_map.iova)
-		uint64_t iova = (uint64_t)virt_to_phys(addr); /* iova = IO Virtual Address, so the memory starts here FROM DEVICE VIEW */
-		check_err(vfio_map_dma(dev, vaddr, iova, HUGE_PAGE_SIZE), "create IOMMU mapping");
+	if (dev->vfio) {
+		// create IOMMU mapping
+		for(uint32_t i = 0; i < size / HUGE_PAGE_SIZE; i++){
+			void* addr = virt_addr + HUGE_PAGE_SIZE*i;
+			uint64_t vaddr = (uint64_t)addr;
+			// TODO(stefan.huber@stusta.de): do we *want* virt_to_phys?
+			// We don't *need* virt_to_phys with vfio, since we can just give the
+			// device memory starting at any arbitrary position (dma_map.iova)
+			uint64_t iova = (uint64_t)virt_to_phys(addr); /* iova = IO Virtual Address, so the memory starts here FROM DEVICE VIEW */
+			check_err(vfio_map_dma(dev, vaddr, iova, HUGE_PAGE_SIZE), "create IOMMU mapping");
+		}
 	}
-#endif
 	return (struct dma_memory) {
 		.virt = virt_addr,
 		.phy = virt_to_phys(virt_addr) /* for VFIO, this needs to point to the device view memory = IOVA! */
@@ -93,11 +91,12 @@ struct mempool* memory_allocate_mempool(struct ixy_device* dev, uint32_t num_ent
 		error("entry size must be a divisor of the huge page size (%d)", HUGE_PAGE_SIZE);
 	}
 	struct mempool* mempool = (struct mempool*) malloc(sizeof(struct mempool) + num_entries * sizeof(uint32_t));
-#ifdef USE_VFIO
-	struct dma_memory mem = vfio_allocate_dma(dev, num_entries * entry_size, false);
-#else
-	struct dma_memory mem = memory_allocate_dma(dev, num_entries * entry_size, false);
-#endif
+	struct dma_memory mem;
+	if (dev->vfio) {
+		mem = vfio_allocate_dma(dev, num_entries * entry_size, false);
+	} else {
+		mem = memory_allocate_dma(dev, num_entries * entry_size, false);
+	}
 	mempool->num_entries = num_entries;
 	mempool->buf_size = entry_size;
 	mempool->base_addr = mem.virt;
@@ -107,11 +106,11 @@ struct mempool* memory_allocate_mempool(struct ixy_device* dev, uint32_t num_ent
 		struct pkt_buf* buf = (struct pkt_buf*) (((uint8_t*) mempool->base_addr) + i * entry_size);
 		// physical addresses are not contiguous within a pool, we need to get the mapping
 		// minor optimization opportunity: this only needs to be done once per page
-#ifdef USE_VFIO
-		buf->buf_addr_phy = buf;
-#else
-		buf->buf_addr_phy = virt_to_phys(buf);
-#endif
+		if (dev->vfio) {
+			buf->buf_addr_phy = buf;
+		} else {
+			buf->buf_addr_phy = virt_to_phys(buf);
+		}
 		buf->mempool_idx = i;
 		buf->mempool = mempool;
 		buf->size = 0;
