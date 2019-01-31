@@ -135,7 +135,7 @@ static void init_rx(struct ixgbe_device* dev) {
 		// setup descriptor ring, see section 7.1.9
 		uint32_t ring_size_bytes = NUM_RX_QUEUE_ENTRIES * sizeof(union ixgbe_adv_rx_desc);
 		struct dma_memory mem;
-		if (&dev->ixy.vfio) {
+		if (dev->ixy.vfio) {
 			mem = vfio_allocate_dma(&dev->ixy, ring_size_bytes, true);
 		} else {
 			mem = memory_allocate_dma(&dev->ixy, ring_size_bytes, true);
@@ -192,7 +192,7 @@ static void init_tx(struct ixgbe_device* dev) {
 		// setup descriptor ring, see section 7.1.9
 		uint32_t ring_size_bytes = NUM_TX_QUEUE_ENTRIES * sizeof(union ixgbe_adv_tx_desc);
 		struct dma_memory mem;
-		if (&dev->ixy.vfio) {
+		if (dev->ixy.vfio) {
 			mem = vfio_allocate_dma(&dev->ixy, ring_size_bytes, true);
 		} else {
 			mem = memory_allocate_dma(&dev->ixy, ring_size_bytes, true);
