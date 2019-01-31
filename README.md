@@ -16,6 +16,7 @@ Check out the `ixy-fwd` and `ixy-pktgen` example apps and look through the code.
 The code often references sections in the [Intel 82599 datasheet](https://www.intel.com/content/dam/www/public/us/en/documents/datasheets/82599-10-gbe-controller-datasheet.pdf) or the [VirtIO specification](http://docs.oasis-open.org/virtio/virtio/v1.0/virtio-v1.0.pdf), so keep them open while reading the code.
 You will be surprised how simple a full driver for a network card can be.
 
+Don't like C? We also have [implementations in other languages](https://github.com/ixy-languages/ixy-languages) including Rust, Go, Haskell, and OCaml.
 
 
 # Features
@@ -23,6 +24,8 @@ You will be surprised how simple a full driver for a network card can be.
 * Driver for paravirtualized virtio NICs
 * Less than 1000 lines of C code for a packet forwarder including the whole driver
 * No kernel modules needed
+* Can run without root privileges ([not yet merged, see fork](https://github.com/huberste/ixy)) 
+* IOMMU support ([not yet merged, see fork](https://github.com/huberste/ixy)) 
 * Simple API with memory management, similar to DPDK, easier to use than APIs based on a ring interface (e.g., netmap)
 * Support for multiple device queues and multiple threads
 * Super fast, can forward > 25 million packets per second on a single 3.0 GHz CPU core
@@ -95,10 +98,6 @@ The same is true for NICs like the ones by Mellanox that keep a lot of magic in 
 
 Interesting candidates would be NICs from the Intel igb and e1000e families as they quite common and reasonably cheap.
 
-### IOMMU support
-Adding support for the IOMMU via the Linux `vfio` driver would allow us to build a safe userspace driver that can drop all privileges after startup.
-Some work towards this can be [found on a branch here](https://github.com/mmisono/ixy/tree/vfio).
-
 ### Better NUMA support
 PCIe devices are attached to a specific CPU in NUMA systems.
 DMA memory should be pinned to the correct NUMA node.
@@ -130,6 +129,8 @@ The good news is that multi-threaded mempools are essentially the same problem a
 ## Why C and not a more reasonable language?
 It's the lowest common denominator that everyone should be able to understand -- this is for educational purposes only.
 I've taken care to keep the code simple and understandable.
+
+We are working on [implementations in different languages](https://github.com/ixy-languages/ixy-languages) including Rust, Go, Haskell, and OCaml.
 
 ## I can't get line rate :(
 We are currently facing a weird problem that impacts performance if your CPU is too fast. DPDK had the same problem in the past. Try applying bidirectional traffic to the forwarder and/or *underclock* your CPU to speed up ixy.
