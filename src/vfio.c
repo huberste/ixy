@@ -16,6 +16,8 @@
 
 #include <linux/vfio.h>
 
+int cfd = 0;
+
 int vfio_init(struct ixy_device* dev){
 	debug("Initialize vfio device");
 	// find iommu group for the device
@@ -45,12 +47,18 @@ int vfio_init(struct ixy_device* dev){
 		return -1;
 	}
 
-	// open vfio file to create new cfio conainer
-	dev->vfio_cfd = open("/dev/vfio/vfio", O_RDWR);
-	if(dev->vfio_cfd < 0){
-		warn("Failed to open /dev/vfio/vfio");
-		return -1;
+	bool initial_setup = false;
+
+	if (cfd == 0) {
+		initial_setup = true;
+		// open vfio file to create new cfio conainer
+		cfd = open("/dev/vfio/vfio", O_RDWR);
+		if(cfd < 0){
+			warn("Failed to open /dev/vfio/vfio");
+			return -1;
+		}
 	}
+	dev->vfio_cfd = cfd;
 
 	// open VFIO Group containing the device
 	snprintf(path, sizeof(path), "/dev/vfio/%d", groupid);
@@ -95,11 +103,13 @@ int vfio_init(struct ixy_device* dev){
 		return -1;
 	}
 
-	// set vfio type (type1 is for IOMMU like VT-d or AMD-Vi)
-	ret = ioctl(dev->vfio_cfd, VFIO_SET_IOMMU, VFIO_TYPE1_IOMMU);
-	if(ret != 0){
-		warn("Failed to set iommu type");
-		return -1;
+	if (initial_setup) {
+		// set vfio type (type1 is for IOMMU like VT-d or AMD-Vi)
+		ret = ioctl(dev->vfio_cfd, VFIO_SET_IOMMU, VFIO_TYPE1_IOMMU);
+		if(ret != 0){
+			warn("Failed to set iommu type");
+			return -1;
+		}
 	}
 
 	// get device descriptor
