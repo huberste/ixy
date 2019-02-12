@@ -100,6 +100,7 @@ int vfio_init(char* pci_addr) {
 
 	int firstsetup = 0;
 	if (vfio_cfd == -1) {
+		firstsetup = 1;
 		// open vfio file to create new cfio conainer
 		vfio_cfd = open("/dev/vfio/vfio", O_RDWR);
 		if(vfio_cfd < 0){
