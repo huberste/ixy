@@ -299,7 +299,7 @@ struct ixy_device* ixgbe_init(const char* pci_addr, uint16_t rx_queues, uint16_t
 	snprintf(path, PATH_MAX, "/sys/bus/pci/devices/%s/iommu_group", pci_addr);
 	dev->ixy.vfio = fileexists(path);
 	if (dev->ixy.vfio) {
-		check_err(vfio_init(pci_addr), "init vfio");
+		dev->ixy.vfio_fd = vfio_init(pci_addr);
 	}
 	dev->ixy.driver_name = driver_name;
 	dev->ixy.num_rx_queues = rx_queues;

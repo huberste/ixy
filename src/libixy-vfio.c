@@ -13,7 +13,7 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 
-static int vfio_cfd;
+static int vfio_cfd = -1;
 static uint64_t _iova = 0;
 
 /* Convert virtual address to IOVA */
@@ -98,11 +98,14 @@ int vfio_init(char* pci_addr) {
 		return -1;
 	}
 
-	// open vfio file to create new cfio conainer
-	vfio_cfd = open("/dev/vfio/vfio", O_RDWR);
-	if(vfio_cfd < 0){
-		// Failed to open /dev/vfio/vfio
-		return -1;
+	int firstsetup = 0;
+	if (vfio_cfd == -1) {
+		// open vfio file to create new cfio conainer
+		vfio_cfd = open("/dev/vfio/vfio", O_RDWR);
+		if(vfio_cfd < 0){
+			// Failed to open /dev/vfio/vfio
+			return -1;
+		}
 	}
 
 	// open VFIO Group containing the device
@@ -117,6 +120,7 @@ int vfio_init(char* pci_addr) {
 	struct vfio_group_status group_status = { .argsz = sizeof(group_status) };
 	ret = ioctl(vfio_gfd, VFIO_GROUP_GET_STATUS, &group_status);
 	if(ret == -1) {
+		// Could not get group status
 		return ret;
 	}
 	if(!group_status.flags & VFIO_GROUP_FLAGS_VIABLE){
@@ -125,17 +129,19 @@ int vfio_init(char* pci_addr) {
 	}
 
 	// Add device to container
-	ret = ioctl(vfio_gfd, VFIO_GROUP_SET_CONTAINER, vfio_cfd);
+	ret = ioctl(vfio_gfd, VFIO_GROUP_SET_CONTAINER, &vfio_cfd);
 	if(ret == -1){
 		// Failed to set container
 		return -1;
 	}
 
-	// set vfio type (type1 is for IOMMU like VT-d or AMD-Vi)
-	ret = ioctl(vfio_cfd, VFIO_SET_IOMMU, VFIO_TYPE1_IOMMU);
-	if(ret == -1){
-		// Failed to set iommu type
-		return -1;
+	if (firstsetup != 0) {
+		// set vfio type (type1 is for IOMMU like VT-d or AMD-Vi)
+		ret = ioctl(vfio_cfd, VFIO_SET_IOMMU, VFIO_TYPE1_IOMMU);
+		if(ret == -1){
+			// Failed to set iommu type
+			return -1;
+		}
 	}
 
 	// get device descriptor
@@ -145,7 +151,7 @@ int vfio_init(char* pci_addr) {
 		return -1;
 	}
 
-	return 0;
+	return vfio_fd;
 }
 
 /* returns a uint8_t pointer to the MMAPED region or MAP_FAILED if failed */
