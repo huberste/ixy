@@ -162,10 +162,10 @@ uint8_t* vfio_map_resource(int vfio_fd, int region_index) {
 
 /* returns iova (physical address of the DMA memory from device view) on success
  * or -1 else */
-uint64_t vfio_map_dma(int fd, uint64_t vaddr, uint32_t size) {
+uint64_t vfio_map_dma(void *vaddr, uint32_t size) {
 	uint64_t iova = get_iova(size);
 	struct vfio_iommu_type1_dma_map dma_map = {
-		.vaddr = vaddr,
+		.vaddr = (uint64_t) vaddr,
 		.iova = iova,
 		.size = size,
 		.argsz = sizeof(dma_map),

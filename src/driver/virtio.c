@@ -11,7 +11,7 @@
 #include "virtio.h"
 #include "virtio_type.h"
 
-#include "vfio.h"
+#include "libixy-vfio.h"
 
 static const char* driver_name = "ixy-virtio";
 

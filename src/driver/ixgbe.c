@@ -2,6 +2,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <linux/limits.h>
+#include <linux/vfio.h>
 #include <sys/stat.h>
 
 #include "log.h"
@@ -12,7 +13,7 @@
 #include "driver/device.h"
 #include "ixgbe_type.h"
 
-#include "vfio.h"
+#include "libixy-vfio.h"
 
 const char* driver_name = "ixy-ixgbe";
 
@@ -135,11 +136,7 @@ static void init_rx(struct ixgbe_device* dev) {
 		// setup descriptor ring, see section 7.1.9
 		uint32_t ring_size_bytes = NUM_RX_QUEUE_ENTRIES * sizeof(union ixgbe_adv_rx_desc);
 		struct dma_memory mem;
-		if (dev->ixy.vfio) {
-			mem = vfio_allocate_dma(&dev->ixy, ring_size_bytes, true);
-		} else {
-			mem = memory_allocate_dma(&dev->ixy, ring_size_bytes, true);
-		}
+		mem = memory_allocate_dma(&dev->ixy, ring_size_bytes, true);
 		// neat trick from Snabb: initialize to 0xFF to prevent rogue memory accesses on premature DMA activation
 		memset(mem.virt, -1, ring_size_bytes);
 		// tell the device where it can write to (its iova, so its view)
@@ -192,11 +189,7 @@ static void init_tx(struct ixgbe_device* dev) {
 		// setup descriptor ring, see section 7.1.9
 		uint32_t ring_size_bytes = NUM_TX_QUEUE_ENTRIES * sizeof(union ixgbe_adv_tx_desc);
 		struct dma_memory mem;
-		if (dev->ixy.vfio) {
-			mem = vfio_allocate_dma(&dev->ixy, ring_size_bytes, true);
-		} else {
-			mem = memory_allocate_dma(&dev->ixy, ring_size_bytes, true);
-		}
+		mem = memory_allocate_dma(&dev->ixy, ring_size_bytes, true);
 		memset(mem.virt, -1, ring_size_bytes);
 		// tell the device where it can write to (its iova, so its view)
 		set_reg32(dev->addr, IXGBE_TDBAL(i), (uint32_t) (mem.phy & 0xFFFFFFFFull));
@@ -306,7 +299,7 @@ struct ixy_device* ixgbe_init(const char* pci_addr, uint16_t rx_queues, uint16_t
 	snprintf(path, PATH_MAX, "/sys/bus/pci/devices/%s/iommu_group", pci_addr);
 	dev->ixy.vfio = fileexists(path);
 	if (dev->ixy.vfio) {
-		check_err(vfio_init(&dev->ixy), "init vfio");
+		check_err(vfio_init(pci_addr), "init vfio");
 	}
 	dev->ixy.driver_name = driver_name;
 	dev->ixy.num_rx_queues = rx_queues;
@@ -317,7 +310,7 @@ struct ixy_device* ixgbe_init(const char* pci_addr, uint16_t rx_queues, uint16_t
 	dev->ixy.set_promisc = ixgbe_set_promisc;
 	dev->ixy.get_link_speed = ixgbe_get_link_speed;
 	if (dev->ixy.vfio) {
-		dev->addr = vfio_map_resource(&dev->ixy);
+		dev->addr = vfio_map_resource(dev->ixy.vfio_fd, VFIO_PCI_BAR0_REGION_INDEX);
 	} else {
 		dev->addr = pci_map_resource(pci_addr);
 	}
