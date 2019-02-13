@@ -71,6 +71,21 @@ int bind_pci_device_to_vfio(char* pci_addr) {
 	return 0;
 }
 
+void vfio_enable_dma(int device_fd) {
+	// write to the command register (offset 4) in the PCIe config space
+	int command_register_offset = 4;
+	// bit 2 is "bus master enable", see PCIe 3.0 specification section 7.5.1.1
+	int bus_master_enable_bit = 2;
+	// Get region info for config region
+	struct vfio_region_info conf_reg = { .argsz = sizeof(conf_reg) };
+	conf_reg.index = VFIO_PCI_CONFIG_REGION_INDEX;
+	check_err(ioctl(device_fd, VFIO_DEVICE_GET_REGION_INFO, &conf_reg), "get vfio config region info");
+	uint16_t dma = 0;
+	pread(device_fd, &dma, 2, conf_reg.offset + command_register_offset);
+	dma |= 1 << bus_master_enable_bit;
+	pwrite(device_fd, &dma, 2, conf_reg.offset + command_register_offset);
+}
+
 /* returns the devices file descriptor or -1 on error */
 int vfio_init(char* pci_addr) {
 	// find iommu group for the device
@@ -165,7 +180,7 @@ int vfio_init(char* pci_addr) {
 	// get device file descriptor
 	int vfio_fd = ioctl(vfio_gfd, VFIO_GROUP_GET_DEVICE_FD, pci_addr);
 	if(vfio_fd < 0){
-		error("Cannot get device fd. errno: %d");
+		error("Cannot get device fd. errno: %d", errno);
 		return -1;
 	}
 
@@ -175,23 +190,8 @@ int vfio_init(char* pci_addr) {
 	return vfio_fd;
 }
 
-void vfio_enable_dma(int device_fd) {
-	// write to the command register (offset 4) in the PCIe config space
-	int command_register_offset = 4;
-	// bit 2 is "bus master enable", see PCIe 3.0 specification section 7.5.1.1
-	int bus_master_enable_bit = 2;
-	// Get region info for config region
-	struct vfio_region_info conf_reg = { .argsz = sizeof(conf_reg) };
-	conf_reg.index = VFIO_PCI_CONFIG_REGION_INDEX;
-	check_err(ioctl(device_fd, VFIO_DEVICE_GET_REGION_INFO, &conf_reg), "get vfio config region info");
-	uint16_t dma = 0;
-	pread(device_fd, &dma, 2, conf_reg.offset + command_register_offset);
-	dma |= 1 << bus_master_enable_bit;
-	pwrite(device_fd, &dma, 2, conf_reg.offset + command_register_offset);
-}
-
 /* returns a uint8_t pointer to the MMAPED region or MAP_FAILED if failed */
-uint8_t* vfio_map_resource(int vfio_fd, int region_index) {
+uint8_t* vfio_map_region(int vfio_fd, int region_index) {
 	struct vfio_region_info region_info = { .argsz = sizeof(region_info) };
 	region_info.index = region_index;
 	int ret = ioctl(vfio_fd, VFIO_DEVICE_GET_REGION_INFO, &region_info);
@@ -214,7 +214,7 @@ uint64_t vfio_map_dma(void *vaddr, uint32_t size) {
 		.flags = VFIO_DMA_MAP_FLAG_READ | VFIO_DMA_MAP_FLAG_WRITE};
 	int ret = ioctl(vfio_cfd, VFIO_IOMMU_MAP_DMA, &dma_map);
 	if(ret == -1){
-		// Failed to map DMA region
+		error("Failed to VFIO map DMA region");
 		return -1;
 	}
 	return iova;

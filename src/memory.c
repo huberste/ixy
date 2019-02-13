@@ -37,6 +37,7 @@ static uint32_t huge_pg_id;
 // allocating anonymous pages would require manual remapping which is more annoying than handling files
 struct dma_memory memory_allocate_dma(struct ixy_device* dev, size_t size, bool require_contiguous) {
 	if (dev->vfio) {
+		debug("allocating dma memory via VFIO");
 		void* virt_addr = (void*) check_err(mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0), "mmap hugepage");
 		// create IOMMU mapping
 		uint64_t iova = (uint64_t) vfio_map_dma(virt_addr, size);
@@ -45,6 +46,7 @@ struct dma_memory memory_allocate_dma(struct ixy_device* dev, size_t size, bool 
 			.phy = iova /* for VFIO, this needs to point to the device view memory = IOVA! */
 		};
 	} else {
+		debug("allocating dma memory via huge page");
 		// round up to multiples of 2 MB if necessary, this is the wasteful part
 		// this could be fixed by co-locating allocations on the same page until a request would be too large
 		// when fixing this: make sure to align on 128 byte boundaries (82599 dma requirement)

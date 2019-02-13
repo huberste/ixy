@@ -308,6 +308,9 @@ struct ixy_device* ixgbe_init(const char* pci_addr, uint16_t rx_queues, uint16_t
 			error("could not initialize the IOMMU for device %s", pci_addr);
 		}
 	}
+	debug("dev->ixy.vfio: %d", dev->ixy.vfio);
+	debug("dev->ixy.vfio_fd: %d", dev->ixy.vfio_fd);
+
 	dev->ixy.driver_name = driver_name;
 	dev->ixy.num_rx_queues = rx_queues;
 	dev->ixy.num_tx_queues = tx_queues;
@@ -316,11 +319,14 @@ struct ixy_device* ixgbe_init(const char* pci_addr, uint16_t rx_queues, uint16_t
 	dev->ixy.read_stats = ixgbe_read_stats;
 	dev->ixy.set_promisc = ixgbe_set_promisc;
 	dev->ixy.get_link_speed = ixgbe_get_link_speed;
+
+	// Map BAR0 region
 	if (dev->ixy.vfio) {
-		dev->addr = vfio_map_resource(dev->ixy.vfio_fd, VFIO_PCI_BAR0_REGION_INDEX);
+		debug("mapping BAR0 region via VFIO...");
+		dev->addr = vfio_map_region(dev->ixy.vfio_fd, VFIO_PCI_BAR0_REGION_INDEX);
 	} else {
+		debug("mapping BAR0 region via pci file...");
 		dev->addr = pci_map_resource(pci_addr);
-		// DMA enabling is done by pci_map_resource.
 	}
 	dev->rx_queues = calloc(rx_queues, sizeof(struct ixgbe_rx_queue) + sizeof(void*) * MAX_RX_QUEUE_ENTRIES);
 	dev->tx_queues = calloc(tx_queues, sizeof(struct ixgbe_tx_queue) + sizeof(void*) * MAX_TX_QUEUE_ENTRIES);
