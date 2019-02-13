@@ -13,6 +13,8 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 
+#include <driver/device.h>
+
 static int vfio_cfd = -1;
 static uint64_t _iova = 0;
 
@@ -89,6 +91,7 @@ int vfio_init(char* pci_addr) {
 		return -1;
 	}
 
+	// append 0x00 to the string
 	iommu_group_path[len] = '\0';
 	char* group_name = basename(iommu_group_path);
 	int groupid;
@@ -137,7 +140,9 @@ int vfio_init(char* pci_addr) {
 	}
 
 	if (firstsetup != 0) {
-		// set vfio type (type1 is for IOMMU like VT-d or AMD-Vi)
+		// Set vfio type (type1 is for IOMMU like VT-d or AMD-Vi) for the
+		// container.
+		// This can only be done after at least one group is in the container.
 		ret = ioctl(vfio_cfd, VFIO_SET_IOMMU, VFIO_TYPE1_IOMMU);
 		if(ret == -1){
 			// Failed to set iommu type
@@ -145,7 +150,7 @@ int vfio_init(char* pci_addr) {
 		}
 	}
 
-	// get device descriptor
+	// get device file descriptor
 	int vfio_fd = ioctl(vfio_gfd, VFIO_GROUP_GET_DEVICE_FD, pci_addr);
 	if(vfio_fd < 0){
 		// Cannot get device fd
@@ -153,6 +158,21 @@ int vfio_init(char* pci_addr) {
 	}
 
 	return vfio_fd;
+}
+
+void vfio_enable_dma(struct ixy_device* dev) {
+	// write to the command register (offset 4) in the PCIe config space
+	int command_register_offset = 4;
+	// bit 2 is "bus master enable", see PCIe 3.0 specification section 7.5.1.1
+	int bus_master_enable_bit = 2;
+	// Get region info for config region
+	struct vfio_region_info conf_reg = { .argsz = sizeof(conf_reg) };
+	conf_reg.index = VFIO_PCI_CONFIG_REGION_INDEX;
+	check_err(ioctl(dev->vfio_fd, VFIO_DEVICE_GET_REGION_INFO, &conf_reg), "get vfio config region info");
+	uint16_t dma = 0;
+	pread(dev->vfio_fd, &dma, 2, conf_reg.offset + command_register_offset);
+	dma |= 1 << bus_master_enable_bit;
+	pwrite(dev->vfio_fd, &dma, 2, conf_reg.offset + command_register_offset);
 }
 
 /* returns a uint8_t pointer to the MMAPED region or MAP_FAILED if failed */

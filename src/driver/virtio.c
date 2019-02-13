@@ -341,7 +341,7 @@ struct ixy_device* virtio_init(const char* pci_addr, uint16_t rx_queues, uint16_
 	struct virtio_device* dev = calloc(1, sizeof(*dev));
 	dev->ixy.pci_addr = strdup(pci_addr);
 	if (dev->ixy.vfio) {
-		check_err(vfio_init(&dev->ixy), "init vfio");
+		check_err(vfio_init(dev->ixy.pci_addr), "init vfio");
 	}
 	dev->ixy.driver_name = driver_name;
 	dev->ixy.num_rx_queues = rx_queues;

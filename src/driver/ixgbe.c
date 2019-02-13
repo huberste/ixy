@@ -283,8 +283,6 @@ static void reset_and_init(struct ixgbe_device* dev) {
 
 struct ixy_device* ixgbe_init(const char* pci_addr, uint16_t rx_queues, uint16_t tx_queues) {
 	if (getuid()) {
-		// TODO(stefan.huber@stusta.de): remove warning when using VFIO. Or
-		// replace it with something better
 		warn("Not running as root, this will probably fail");
 	}
 	if (rx_queues > MAX_QUEUES) {
@@ -293,13 +291,22 @@ struct ixy_device* ixgbe_init(const char* pci_addr, uint16_t rx_queues, uint16_t
 	if (tx_queues > MAX_QUEUES) {
 		error("cannot configure %d tx queues: limit is %d", tx_queues, MAX_QUEUES);
 	}
+
+	// Allocate memory for the ixgbe device that will be returned
 	struct ixgbe_device* dev = (struct ixgbe_device*) malloc(sizeof(struct ixgbe_device));
 	dev->ixy.pci_addr = strdup(pci_addr);
+
+	// Check if we want the VFIO stuff
+	// This is done by checking if the device is in an IOMMU group.
 	char path[PATH_MAX];
 	snprintf(path, PATH_MAX, "/sys/bus/pci/devices/%s/iommu_group", pci_addr);
 	dev->ixy.vfio = fileexists(path);
 	if (dev->ixy.vfio) {
+		// initialize the IOMMU for this device
 		dev->ixy.vfio_fd = vfio_init(pci_addr);
+		if (dev->ixy.vfio_fd < 0) {
+			error("could not initialize the IOMMU for device %s", pci_addr);
+		}
 	}
 	dev->ixy.driver_name = driver_name;
 	dev->ixy.num_rx_queues = rx_queues;
@@ -311,8 +318,10 @@ struct ixy_device* ixgbe_init(const char* pci_addr, uint16_t rx_queues, uint16_t
 	dev->ixy.get_link_speed = ixgbe_get_link_speed;
 	if (dev->ixy.vfio) {
 		dev->addr = vfio_map_resource(dev->ixy.vfio_fd, VFIO_PCI_BAR0_REGION_INDEX);
+		vfio_enable_dma(&dev->ixy);
 	} else {
 		dev->addr = pci_map_resource(pci_addr);
+		// DMA enabling is done by pci_map_resource.
 	}
 	dev->rx_queues = calloc(rx_queues, sizeof(struct ixgbe_rx_queue) + sizeof(void*) * MAX_RX_QUEUE_ENTRIES);
 	dev->tx_queues = calloc(tx_queues, sizeof(struct ixgbe_tx_queue) + sizeof(void*) * MAX_TX_QUEUE_ENTRIES);
