@@ -318,7 +318,6 @@ struct ixy_device* ixgbe_init(const char* pci_addr, uint16_t rx_queues, uint16_t
 	dev->ixy.get_link_speed = ixgbe_get_link_speed;
 	if (dev->ixy.vfio) {
 		dev->addr = vfio_map_resource(dev->ixy.vfio_fd, VFIO_PCI_BAR0_REGION_INDEX);
-		vfio_enable_dma(&dev->ixy);
 	} else {
 		dev->addr = pci_map_resource(pci_addr);
 		// DMA enabling is done by pci_map_resource.

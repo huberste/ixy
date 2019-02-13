@@ -12,7 +12,7 @@ int bind_pci_device_to_vfio(char* pci_addr);
 int vfio_init(const char* pci_addr);
 
 /* enables DMA on a VFIO device */
-void vfio_enable_dma(struct ixy_device* dev);
+void vfio_enable_dma(int device_fd);
 
 /* returns a uint8_t pointer to the MMAPED region or MAP_FAILED if failed.
  * region_index is to be taken from linux/vfio.h */

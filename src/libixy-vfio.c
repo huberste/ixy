@@ -107,16 +107,28 @@ int vfio_init(char* pci_addr) {
 		// open vfio file to create new cfio conainer
 		vfio_cfd = open("/dev/vfio/vfio", O_RDWR);
 		if(vfio_cfd < 0){
-			// Failed to open /dev/vfio/vfio
+			error("Failed to open /dev/vfio/vfio");
+			return -1;
+		}
+
+		// check if the container's API version is the same as the VFIO API's
+		if (ioctl(vfio_cfd, VFIO_GET_API_VERSION) != VFIO_API_VERSION) {
+			error("unknown VFIO API Version");
+			return -1;
+		}
+
+		// check if type1 is supported
+		if (ioctl(vfio_cfd, VFIO_CHECK_EXTENSION, VFIO_TYPE1_IOMMU) != 1) {
+			error("container doesn't support Type1 IOMMU");
 			return -1;
 		}
 	}
 
-	// open VFIO Group containing the device
+	// open VFIO group containing the device
 	snprintf(path, sizeof(path), "/dev/vfio/%d", groupid);
 	int vfio_gfd = open(path, O_RDWR);
 	if(vfio_gfd < 0){
-		// Failed to open vfio group
+		error("Failed to open vfio group");
 		return -1;
 	}
 
@@ -124,18 +136,18 @@ int vfio_init(char* pci_addr) {
 	struct vfio_group_status group_status = { .argsz = sizeof(group_status) };
 	ret = ioctl(vfio_gfd, VFIO_GROUP_GET_STATUS, &group_status);
 	if(ret == -1) {
-		// Could not get group status
+		error("failed to get VFIO group status. errno: %d", errno);
 		return ret;
 	}
 	if(!group_status.flags & VFIO_GROUP_FLAGS_VIABLE){
-		// VFIO group is not viable
+		error("VFIO group is not viable - are all devices in the group bound to the VFIO driver?");
 		return -1;
 	}
 
-	// Add device to container
+	// Add group to container
 	ret = ioctl(vfio_gfd, VFIO_GROUP_SET_CONTAINER, &vfio_cfd);
 	if(ret == -1){
-		// Failed to set container
+		error("Failed to set container. errno: %d", errno);
 		return -1;
 	}
 
@@ -145,7 +157,7 @@ int vfio_init(char* pci_addr) {
 		// This can only be done after at least one group is in the container.
 		ret = ioctl(vfio_cfd, VFIO_SET_IOMMU, VFIO_TYPE1_IOMMU);
 		if(ret == -1){
-			// Failed to set iommu type
+			error("Failed to set iommu type. errno: %d", errno);
 			return -1;
 		}
 	}
@@ -153,14 +165,17 @@ int vfio_init(char* pci_addr) {
 	// get device file descriptor
 	int vfio_fd = ioctl(vfio_gfd, VFIO_GROUP_GET_DEVICE_FD, pci_addr);
 	if(vfio_fd < 0){
-		// Cannot get device fd
+		error("Cannot get device fd. errno: %d");
 		return -1;
 	}
+
+	// enable DMA
+	vfio_enable_dma(vfio_fd);
 
 	return vfio_fd;
 }
 
-void vfio_enable_dma(struct ixy_device* dev) {
+void vfio_enable_dma(int device_fd) {
 	// write to the command register (offset 4) in the PCIe config space
 	int command_register_offset = 4;
 	// bit 2 is "bus master enable", see PCIe 3.0 specification section 7.5.1.1
@@ -168,11 +183,11 @@ void vfio_enable_dma(struct ixy_device* dev) {
 	// Get region info for config region
 	struct vfio_region_info conf_reg = { .argsz = sizeof(conf_reg) };
 	conf_reg.index = VFIO_PCI_CONFIG_REGION_INDEX;
-	check_err(ioctl(dev->vfio_fd, VFIO_DEVICE_GET_REGION_INFO, &conf_reg), "get vfio config region info");
+	check_err(ioctl(device_fd, VFIO_DEVICE_GET_REGION_INFO, &conf_reg), "get vfio config region info");
 	uint16_t dma = 0;
-	pread(dev->vfio_fd, &dma, 2, conf_reg.offset + command_register_offset);
+	pread(device_fd, &dma, 2, conf_reg.offset + command_register_offset);
 	dma |= 1 << bus_master_enable_bit;
-	pwrite(dev->vfio_fd, &dma, 2, conf_reg.offset + command_register_offset);
+	pwrite(device_fd, &dma, 2, conf_reg.offset + command_register_offset);
 }
 
 /* returns a uint8_t pointer to the MMAPED region or MAP_FAILED if failed */
