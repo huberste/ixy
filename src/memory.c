@@ -98,11 +98,12 @@ struct mempool* memory_allocate_mempool(struct ixy_device* dev, uint32_t num_ent
 	for (uint32_t i = 0; i < num_entries; i++) {
 		mempool->free_stack[i] = i;
 		struct pkt_buf* buf = (struct pkt_buf*) (((uint8_t*) mempool->base_addr) + i * entry_size);
-		// physical addresses are not contiguous within a pool, we need to get the mapping
-		// minor optimization opportunity: this only needs to be done once per page
 		if (dev->vfio) {
+			// "physical" memory is iova address which is identity mapped to vaddr
 			buf->buf_addr_phy = (uintptr_t) buf;
 		} else {
+			// physical addresses are not contiguous within a pool, we need to get the mapping
+			// minor optimization opportunity: this only needs to be done once per page
 			buf->buf_addr_phy = virt_to_phys(buf);
 		}
 		buf->mempool_idx = i;

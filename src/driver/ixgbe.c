@@ -308,9 +308,6 @@ struct ixy_device* ixgbe_init(const char* pci_addr, uint16_t rx_queues, uint16_t
 			error("could not initialize the IOMMU for device %s", pci_addr);
 		}
 	}
-	debug("dev->ixy.vfio: %d", dev->ixy.vfio);
-	debug("dev->ixy.vfio_fd: %d", dev->ixy.vfio_fd);
-
 	dev->ixy.driver_name = driver_name;
 	dev->ixy.num_rx_queues = rx_queues;
 	dev->ixy.num_tx_queues = tx_queues;

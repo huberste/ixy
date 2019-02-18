@@ -18,7 +18,9 @@
 static int vfio_cfd = -1;
 static uint64_t _iova = 0;
 
-/* Convert virtual address to IOVA */
+/* Convert virtual address to IOVA.
+ * IOVA Adresses are censecutive. This mapping is not saved anywhere, so this
+ * might be a bad idea? */
 static uint64_t get_iova(uint32_t size) {
 	uint64_t ret = _iova;
 	_iova += size;
@@ -102,21 +104,20 @@ int vfio_init(char* pci_addr) {
 
 	int len = readlink(path, iommu_group_path, sizeof(iommu_group_path));
 	if(len <= 0){
-		 // No iommu_group for device
+		error("failed to find the iommu_group for device '%s'", pci_addr);
 		return -1;
 	}
 
-	// append 0x00 to the string
-	iommu_group_path[len] = '\0';
+	iommu_group_path[len] = '\0'; // append 0x00 to the string to end it
 	char* group_name = basename(iommu_group_path);
 	int groupid;
 	ret = sscanf(group_name, "%d", &groupid);
 	if(ret != 1){
-		// Unkonwn group
+		error("Failed to convert group id '%s' to int", group_name);
 		return -1;
 	}
 
-	int firstsetup = 0;
+	int firstsetup = 0; // Need to set up the container exactly once
 	if (vfio_cfd == -1) {
 		firstsetup = 1;
 		// open vfio file to create new cfio conainer
@@ -171,8 +172,8 @@ int vfio_init(char* pci_addr) {
 		// container.
 		// This can only be done after at least one group is in the container.
 		ret = ioctl(vfio_cfd, VFIO_SET_IOMMU, VFIO_TYPE1_IOMMU);
-		if(ret == -1){
-			error("Failed to set iommu type. errno: %d", errno);
+		if(ret != 0){
+			error("Failed to set iommu type. errno: %d", -ret);
 			return -1;
 		}
 	}
@@ -180,7 +181,7 @@ int vfio_init(char* pci_addr) {
 	// get device file descriptor
 	int vfio_fd = ioctl(vfio_gfd, VFIO_GROUP_GET_DEVICE_FD, pci_addr);
 	if(vfio_fd < 0){
-		error("Cannot get device fd. errno: %d", errno);
+		error("Cannot get device fd. errno: %d", -vfio_fd);
 		return -1;
 	}
 
@@ -197,26 +198,22 @@ uint8_t* vfio_map_region(int vfio_fd, int region_index) {
 	int ret = ioctl(vfio_fd, VFIO_DEVICE_GET_REGION_INFO, &region_info);
 	if(ret == -1){
 		// Failed to set iommu type
-		return MAP_FAILED;
+		return MAP_FAILED; // MAP_FAILED == ((void *) -1)
 	}
-	return (uint8_t*) mmap(NULL, region_info.size, PROT_READ | PROT_WRITE, MAP_SHARED, vfio_fd, region_info.offset);
+	return (uint8_t*) check_err(mmap(NULL, region_info.size, PROT_READ | PROT_WRITE, MAP_SHARED, vfio_fd, region_info.offset), "mmap vfio bar0 resource");
 }
 
-/* returns iova (physical address of the DMA memory from device view) on success
- * or -1 else */
+/* returns iova (physical address of the DMA memory from device view) on success */
 uint64_t vfio_map_dma(void *vaddr, uint32_t size) {
-	uint64_t iova = get_iova(size);
+	// uint64_t iova = get_iova(size); // bad idea, see description of get_iova
+	uint64_t iova = (uint64_t) vaddr; // Identity mapping makes more sense
 	struct vfio_iommu_type1_dma_map dma_map = {
 		.vaddr = (uint64_t) vaddr,
 		.iova = iova,
 		.size = size,
 		.argsz = sizeof(dma_map),
 		.flags = VFIO_DMA_MAP_FLAG_READ | VFIO_DMA_MAP_FLAG_WRITE};
-	int ret = ioctl(vfio_cfd, VFIO_IOMMU_MAP_DMA, &dma_map);
-	if(ret == -1){
-		error("Failed to VFIO map DMA region");
-		return -1;
-	}
+	check_err(ioctl(vfio_cfd, VFIO_IOMMU_MAP_DMA, &dma_map), "IOMMU Map DMA Memory");
 	return iova;
 }
 
