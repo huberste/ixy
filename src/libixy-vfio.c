@@ -16,6 +16,8 @@
 
 #include <driver/device.h>
 
+ssize_t MIN_DMA_MEMORY = 4096; // we can not allocate less than page_size memory
+
 void vfio_enable_dma(int device_fd) {
 	// write to the command register (offset 4) in the PCIe config space
 	int command_register_offset = 4;
@@ -154,7 +156,7 @@ uint64_t vfio_map_dma(void *vaddr, uint32_t size) {
 	struct vfio_iommu_type1_dma_map dma_map = {
 		.vaddr = (uint64_t) vaddr,
 		.iova = iova,
-		.size = size,
+		.size = size < MIN_DMA_MEMORY ? MIN_DMA_MEMORY : size,
 		.argsz = sizeof(dma_map),
 		.flags = VFIO_DMA_MAP_FLAG_READ | VFIO_DMA_MAP_FLAG_WRITE};
 	int cfd = get_vfio_container();

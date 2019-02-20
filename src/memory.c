@@ -16,7 +16,7 @@
 // we want one VFIO Container for all NICs, so every NIC can read from every
 // other NICs memory, especially the mempool. When not using the IOMMU / VFIO,
 // this variable is unused.
-int VFIO_CONTAINER_FILE_DESCRIPTOR = -1;
+volatile int VFIO_CONTAINER_FILE_DESCRIPTOR = -1;
 
 // translate a virtual address to a physical one via /proc/self/pagemap
 static uintptr_t virt_to_phys(void* virt) {
@@ -147,7 +147,7 @@ int get_vfio_container() {
 	return VFIO_CONTAINER_FILE_DESCRIPTOR;
 }
 
-/* globally sets the VFIO container */
+/* globally sets the VFIO container and returns the set value */
 void set_vfio_container(int fd) {
 	VFIO_CONTAINER_FILE_DESCRIPTOR = fd;
 }
