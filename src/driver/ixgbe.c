@@ -23,6 +23,9 @@ const int MAX_TX_QUEUE_ENTRIES = 4096;
 const int NUM_RX_QUEUE_ENTRIES = 512;
 const int NUM_TX_QUEUE_ENTRIES = 512;
 
+const int PKT_BUF_ENTRY_SIZE = 2048;
+const int MIN_MEMPOOL_ENTRIES = 4096;
+
 const int TX_CLEAN_BATCH = 32;
 
 // allocated for each rx queue, keeps state for the receive function
@@ -67,8 +70,8 @@ static void start_rx_queue(struct ixgbe_device* dev, int queue_id) {
 	// is the default MTU of 1518
 	// this has to be fixed if jumbo frames are to be supported
 	// mempool should be >= the number of rx and tx descriptors for a forwarding application
-	uint32_t mempool_size = NUM_RX_QUEUE_ENTRIES + NUM_TX_QUEUE_ENTRIES;
-	queue->mempool = memory_allocate_mempool(&dev->ixy, mempool_size < 4096 ? 4096 : mempool_size, 2048);
+	int mempool_size = NUM_RX_QUEUE_ENTRIES + NUM_TX_QUEUE_ENTRIES;
+	queue->mempool = memory_allocate_mempool(mempool_size < MIN_MEMPOOL_ENTRIES ? MIN_MEMPOOL_ENTRIES : mempool_size, PKT_BUF_ENTRY_SIZE);
 	if (queue->num_entries & (queue->num_entries - 1)) {
 		error("number of queue entries must be a power of 2");
 	}
@@ -136,7 +139,7 @@ static void init_rx(struct ixgbe_device* dev) {
 		// setup descriptor ring, see section 7.1.9
 		uint32_t ring_size_bytes = NUM_RX_QUEUE_ENTRIES * sizeof(union ixgbe_adv_rx_desc);
 		struct dma_memory mem;
-		mem = memory_allocate_dma(&dev->ixy, ring_size_bytes, true);
+		mem = memory_allocate_dma(ring_size_bytes, true);
 		// neat trick from Snabb: initialize to 0xFF to prevent rogue memory accesses on premature DMA activation
 		memset(mem.virt, -1, ring_size_bytes);
 		// tell the device where it can write to (its iova, so its view)
@@ -189,7 +192,7 @@ static void init_tx(struct ixgbe_device* dev) {
 		// setup descriptor ring, see section 7.1.9
 		uint32_t ring_size_bytes = NUM_TX_QUEUE_ENTRIES * sizeof(union ixgbe_adv_tx_desc);
 		struct dma_memory mem;
-		mem = memory_allocate_dma(&dev->ixy, ring_size_bytes, true);
+		mem = memory_allocate_dma(ring_size_bytes, true);
 		memset(mem.virt, -1, ring_size_bytes);
 		// tell the device where it can write to (its iova, so its view)
 		set_reg32(dev->addr, IXGBE_TDBAL(i), (uint32_t) (mem.phy & 0xFFFFFFFFull));

@@ -3,8 +3,6 @@
 
 #include <stdint.h>
 
-struct ixy_device;
-
 /* returns zero on success or -1 else */
 int bind_pci_device_to_vfio(char* pci_addr);
 

@@ -44,11 +44,18 @@ struct dma_memory {
 	uintptr_t phy;
 };
 
-struct dma_memory memory_allocate_dma(struct ixy_device* dev, size_t size, bool require_contiguous);
+struct dma_memory memory_allocate_dma(size_t size, bool require_contiguous);
 
-struct mempool* memory_allocate_mempool(struct ixy_device* dev, uint32_t num_entries, uint32_t entry_size);
+struct mempool* memory_allocate_mempool(uint32_t num_entries, uint32_t entry_size);
 uint32_t pkt_buf_alloc_batch(struct mempool* mempool, struct pkt_buf* bufs[], uint32_t num_bufs);
 struct pkt_buf* pkt_buf_alloc(struct mempool* mempool);
 void pkt_buf_free(struct pkt_buf* buf);
+
+// VFIO / IOMMU specific stuff
+/* reads the global VFIO container */
+int get_vfio_container();
+
+/* globally sets the VFIO container */
+void set_vfio_container(int fd);
 
 #endif //IXY_MEMORY_H

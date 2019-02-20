@@ -13,6 +13,11 @@
 
 #include "libixy-vfio.h"
 
+// we want one VFIO Container for all NICs, so every NIC can read from every
+// other NICs memory, especially the mempool. When not using the IOMMU / VFIO,
+// this variable is unused.
+int VFIO_CONTAINER_FILE_DESCRIPTOR = -1;
+
 // translate a virtual address to a physical one via /proc/self/pagemap
 static uintptr_t virt_to_phys(void* virt) {
 	long pagesize = sysconf(_SC_PAGESIZE);
@@ -35,8 +40,8 @@ static uint32_t huge_pg_id;
 // this requires hugetlbfs to be mounted at /mnt/huge
 // not using anonymous hugepages because hugetlbfs can give us multiple pages with contiguous virtual addresses
 // allocating anonymous pages would require manual remapping which is more annoying than handling files
-struct dma_memory memory_allocate_dma(struct ixy_device* dev, size_t size, bool require_contiguous) {
-	if (dev->vfio) {
+struct dma_memory memory_allocate_dma(size_t size, bool require_contiguous) {
+	if (VFIO_CONTAINER_FILE_DESCRIPTOR != -1) { // VFIO == -1 means that there is no VFIO container set, i.e. VFIO / IOMMU is not activated
 		debug("allocating dma memory via VFIO");
 		void* virt_addr = (void*) check_err(mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0), "mmap hugepage");
 		// create IOMMU mapping
@@ -81,16 +86,16 @@ struct dma_memory memory_allocate_dma(struct ixy_device* dev, size_t size, bool 
 // this is currently not yet thread-safe, i.e., a pool can only be used by one thread,
 // this means a packet can only be sent/received by a single thread
 // entry_size can be 0 to use the default
-struct mempool* memory_allocate_mempool(struct ixy_device* dev, uint32_t num_entries, uint32_t entry_size) {
+struct mempool* memory_allocate_mempool(uint32_t num_entries, uint32_t entry_size) {
 	entry_size = entry_size ? entry_size : 2048;
 	// require entries that neatly fit into the page size, this makes the memory pool much easier
 	// otherwise our base_addr + index * size formula would be wrong because we can't cross a page-boundary
-	if (HUGE_PAGE_SIZE % entry_size) {
+	if ((VFIO_CONTAINER_FILE_DESCRIPTOR == -1) && HUGE_PAGE_SIZE % entry_size) {
 		error("entry size must be a divisor of the huge page size (%d)", HUGE_PAGE_SIZE);
 	}
 	struct mempool* mempool = (struct mempool*) malloc(sizeof(struct mempool) + num_entries * sizeof(uint32_t));
 	struct dma_memory mem;
-	mem = memory_allocate_dma(dev, num_entries * entry_size, false);
+	mem = memory_allocate_dma(num_entries * entry_size, false);
 	mempool->num_entries = num_entries;
 	mempool->buf_size = entry_size;
 	mempool->base_addr = mem.virt;
@@ -98,7 +103,7 @@ struct mempool* memory_allocate_mempool(struct ixy_device* dev, uint32_t num_ent
 	for (uint32_t i = 0; i < num_entries; i++) {
 		mempool->free_stack[i] = i;
 		struct pkt_buf* buf = (struct pkt_buf*) (((uint8_t*) mempool->base_addr) + i * entry_size);
-		if (dev->vfio) {
+		if (VFIO_CONTAINER_FILE_DESCRIPTOR != -1) {
 			// "physical" memory is iova address which is identity mapped to vaddr
 			buf->buf_addr_phy = (uintptr_t) buf;
 		} else {
@@ -136,3 +141,13 @@ void pkt_buf_free(struct pkt_buf* buf) {
 	mempool->free_stack[mempool->free_stack_top++] = buf->mempool_idx;
 }
 
+// VFIO / IOMMU specific stuff
+/* reads the global VFIO container */
+int get_vfio_container() {
+	return VFIO_CONTAINER_FILE_DESCRIPTOR;
+}
+
+/* globally sets the VFIO container */
+void set_vfio_container(int fd) {
+	VFIO_CONTAINER_FILE_DESCRIPTOR = fd;
+}

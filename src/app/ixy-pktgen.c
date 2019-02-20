@@ -46,7 +46,7 @@ static uint16_t calc_ip_checksum(uint8_t* data, uint32_t len) {
 
 static struct mempool* init_mempool(struct ixy_device* dev) {
 	const int NUM_BUFS = 2048;
-	struct mempool* mempool = memory_allocate_mempool(dev, NUM_BUFS, 0);
+	struct mempool* mempool = memory_allocate_mempool(NUM_BUFS, 0);
 	// pre-fill all our packet buffers with some templates that can be modified later
 	// we have to do it like this because sending is async in the hardware; we cannot re-use a buffer immediately
 	struct pkt_buf* bufs[NUM_BUFS];

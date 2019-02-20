@@ -59,7 +59,7 @@ static void virtio_legacy_setup_tx_queue(struct virtio_device* dev, uint16_t idx
 		return;
 	}
 	size_t virt_queue_mem_size = virtio_legacy_vring_size(max_queue_size, 4096);
-	struct dma_memory mem = memory_allocate_dma(&dev->ixy, virt_queue_mem_size, true);
+	struct dma_memory mem = memory_allocate_dma(virt_queue_mem_size, true);
 	memset(mem.virt, 0xab, virt_queue_mem_size);
 	debug("Allocated %zu bytes for virt queue at %p", virt_queue_mem_size, mem.virt);
 	write_io32(dev->fd, mem.phy >> VIRTIO_PCI_QUEUE_ADDR_SHIFT, VIRTIO_PCI_QUEUE_PFN);
@@ -88,7 +88,7 @@ static void virtio_legacy_setup_tx_queue(struct virtio_device* dev, uint16_t idx
 
 	// Ctrl queue packets are not supplied by the user
 	if (idx == 2) {
-		vq->mempool = memory_allocate_mempool(&dev->ixy, max_queue_size, 2048);
+		vq->mempool = memory_allocate_mempool(max_queue_size, 2048);
 	}
 
 	// Disable interrupts - Section 2.4.7
@@ -235,7 +235,7 @@ static void virtio_legacy_setup_rx_queue(struct virtio_device* dev, uint16_t idx
 	uint32_t notify_offset = read_io16(dev->fd, VIRTIO_PCI_QUEUE_NOTIFY);
 	debug("Notifcation offset %u", notify_offset);
 	size_t virt_queue_mem_size = virtio_legacy_vring_size(max_queue_size, 4096);
-	struct dma_memory mem = memory_allocate_dma(&dev->ixy, virt_queue_mem_size, true);
+	struct dma_memory mem = memory_allocate_dma(virt_queue_mem_size, true);
 	memset(mem.virt, 0xab, virt_queue_mem_size);
 	debug("Allocated %zu bytes for virt queue at %p", virt_queue_mem_size, mem.virt);
 	write_io32(dev->fd, mem.phy >> VIRTIO_PCI_QUEUE_ADDR_SHIFT, VIRTIO_PCI_QUEUE_PFN);
@@ -267,7 +267,7 @@ static void virtio_legacy_setup_rx_queue(struct virtio_device* dev, uint16_t idx
 	// Allocate buffers and fill descriptor table - Section 3.2.1
 	// We allocate more bufs than what would fit in the queue,
 	// because we don't want to stall rx if users hold bufs for longer
-	vq->mempool = memory_allocate_mempool(&dev->ixy, max_queue_size * 4, 2048);
+	vq->mempool = memory_allocate_mempool(max_queue_size * 4, 2048);
 
 	dev->rx_queue = vq;
 }
