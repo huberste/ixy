@@ -133,6 +133,7 @@ uint32_t pkt_buf_alloc_batch(struct mempool* mempool, struct pkt_buf* bufs[], ui
 struct pkt_buf* pkt_buf_alloc(struct mempool* mempool) {
 	struct pkt_buf* buf = NULL;
 	pkt_buf_alloc_batch(mempool, &buf, 1);
+	//printf("0x%x\n", (uint64_t) buf);
 	return buf;
 }
 

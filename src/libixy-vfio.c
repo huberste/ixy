@@ -159,6 +159,7 @@ uint64_t vfio_map_dma(void *vaddr, uint32_t size) {
 		.size = size < MIN_DMA_MEMORY ? MIN_DMA_MEMORY : size,
 		.argsz = sizeof(dma_map),
 		.flags = VFIO_DMA_MAP_FLAG_READ | VFIO_DMA_MAP_FLAG_WRITE};
+	debug("mapping iommu memory of size %d", dma_map.size);
 	int cfd = get_vfio_container();
 	check_err(ioctl(cfd, VFIO_IOMMU_MAP_DMA, &dma_map), "IOMMU Map DMA Memory");
 	return iova;
